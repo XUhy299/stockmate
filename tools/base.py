@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, List
 import asyncio
 import logging
+from execution_context import emit_progress
 
 logger = logging.getLogger(__name__)
 
@@ -93,13 +94,18 @@ class Tool(ABC):
         """
         运行工具（带异常处理）
         """
+        emit_progress("tool_started", tool=self.name)
+        self.logger.info("Tool started: %s", self.name)
         try:
             self.logger.debug(f"执行工具 {self.name}: {kwargs}")
             result = await self.execute(**kwargs)
             self.logger.debug(f"工具 {self.name} 执行完成")
+            self.logger.info("Tool completed: %s success=%s", self.name, result.success)
+            emit_progress("tool_completed", tool=self.name, success=result.success)
             return result
         except Exception as e:
             self.logger.error(f"工具 {self.name} 执行失败: {e}")
+            emit_progress("tool_completed", tool=self.name, success=False)
             return ToolResult(
                 success=False,
                 error=str(e),

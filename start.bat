@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 >nul
-echo 正在启动A股分析Agent系统...
+echo 正在启动股伴 StockMate...
 echo.
 
 REM 检查Python是否安装
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo 错误: 未安装Python，请先安装Python 3.8+
+    echo 错误: 未安装Python，请先安装Python 3.12
     pause
     exit /b 1
 )

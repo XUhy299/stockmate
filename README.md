@@ -1,527 +1,183 @@
-# 📈 A股分析Agent系统
+# 股伴 StockMate
 
-一个基于LLM和AKShare的智能A股分析系统，提供实时监控、每日报告和对话式分析功能。
+一个面向个人的 A 股研究 Agent：通过桌面 Web 对话获取行情、研究个股、生成简报，并记住你的投资偏好、按计划继续研究。
 
-## ✨ 功能特性
+React / TypeScript 前端与 Python / aiohttp 后端，复用同一套主 Agent、工具、Skill 和飞书接入。本机、单用户运行，不提供交易执行功能。
 
-### 1. 实时技术监控 + Agent智能分析 ⏰
-- **双模式监控架构**：
-  - **心跳模式**：每分钟纯数据检查自选股（无LLM，低资源消耗）
-  - **触发模式**：检测到异常时，通过**消息队列**唤醒主Agent进行深度分析
-- **定期分析**：每30分钟无异常时，自动唤醒Agent分析所有自选数据，决定是否需要提醒
-- **自动检测技术指标异常**：
-  - 价格异动（涨跌幅 > 3%/5%）
-  - 成交量异常放大（量比 > 2.5x）
-  - 短时快速变动（分钟内变动 > 0.8%）
-  - RSI超买超卖（>80/<20）
-  - BOLL布林带突破
-- 发现异常立即通知用户并给出投资建议
+## 功能
 
-### 2. Agent Idle/工作模式 🤖
-- **WORK PHASE**：处理用户对话、执行工具调用、分析股票
-- **IDLE PHASE**：无任务时进入挂机状态，节省资源
-- **消息队列驱动**：通过 `post_event()` 从外部唤醒Agent
-  - 用户消息
-  - 股价异常告警 (`price_alert`)
-  - 定期分析任务 (`routine_analysis`)
-- 状态自动持久化，重启后恢复
+- **对话研究**：真实工具调用、多轮追问、Markdown 表格和代码展示；执行状态通过 SSE 更新，正文生成完成后显示。
+- **我的自选**：显示股票名称、代码和备注。按钮直接查工具，卡片保留在网页记录中，不进入模型上下文。
+- **每日简报**：执行现有 `morning_report` Skill，报告可继续追问；另有个股研究与异动分析 Skill。
+- **看大盘**：展示涨跌家数、涨跌停及市场情绪，不额外请求模型总结。
+- **定时任务**：手动或通过自然语言创建单次、每天、工作日任务，查看下次时间、暂停、启用或删除。
+- **用户记忆**：保存风险偏好、投资风格和关注行业；聊天与上下文摘要在重启后恢复。
+- **渠道接入**：支持飞书和企业微信，回复按任务来源发送，网页回复不会自动误发到飞书。
 
-### 3. 子智能体 + Skill 架构 🎯
-- **主Agent**：处理用户交互，协调任务分配
-- **子Agent (SubAgent)**：执行复杂分析任务
-  - 深度调研报告 (`research_report` skill)
-  - 异常告警分析 (`alert_analysis` skill)
-  - 每日晨报生成 (`morning_report` skill)
-- **Skill系统**：Markdown格式定义分析模板，可扩展
+行情、K 线、新闻和市场情绪来自公开数据源；接口错误会明确返回，不以空数据冒充成功。选股工具筛选的是成交额前 200 名，不是全市场扫描。页面背景 K 线仅为装饰。
 
-### 4. 早间市场报告 📰
-- 每天开市前自动生成市场分析报告
-- 使用子Agent + `morning_report` skill 生成专业报告
-- 内容包括：
-  - 市场情绪分析（涨跌家数、涨跌停）
-  - 自选股票技术分析
-  - 热门股票调研
-  - 板块资金流向
-  - 投资建议
+## 快速开始
 
-### 5. 对话式分析 💬
-- 自然语言交互，分析任意股票
-- 智能工具调用，自动获取数据
-- 支持**多轮工具调用**：先获取数据 → 分析 → 决定是否需要更多信息
-- 技术分析、新闻分析、综合评估
+已验证环境：Python 3.12、Node.js 24。建议使用 Python 3.12 和 Node.js 22+（包含 npm）。
 
-### 6. 上下文压缩 🗜️
-- 长对话自动压缩，保留关键信息
-- 压缩策略：
-  - 保留最近3个工具调用完整内容
-  - 更早的工具调用转为占位符
-  - 使用LLM智能总结股票相关信息
-- Token阈值可配置（默认6000）
+### 1. 安装
 
-### 7. 用户记忆系统 🧠
-- 双层记忆架构：
-  - **用户画像** (`memory/user.md`)：风险偏好、投资风格、关注领域、交易规则
-  - **会话历史** (`memory/sessions/{session_id}.json`)：完整对话记录，支持多会话
-  - **关键事件** (`memory/history.md`)：重要操作记录
-- 分析时自动融入用户偏好
-- 支持多会话隔离（`--session <id>`）
-
-### 5. 智能选股 🔍
-- 多维度选股策略：
-  - 技术面选股
-  - 动量选股
-  - 价值投资选股
-  - 突破选股
-
-## 🚀 快速开始
-
-### 安装依赖
-
-```bash
-# 创建虚拟环境（推荐）
+```powershell
+git clone https://github.com/XUhy299/stockmate.git
+cd stockmate
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-venv\Scripts\activate  # Windows
-
-# 安装依赖
-pip install -r requirements.txt
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+npm --prefix front ci
 ```
 
-### 配置环境变量
+已有本地项目可以继续使用原来的 `astack` 文件夹和虚拟环境，不需要搬动；不要覆盖已有 `.env` 和用户数据。
 
-```bash
-# 复制环境变量模板
-cp .env.example .env
+### 2. 配置模型
 
-# 编辑 .env 文件，设置您的OpenAI API密钥
-OPENAI_API_KEY=your_api_key_here
+编辑 `.env`，填写服务商提供的 OpenAI 兼容密钥、兼容接口地址和可用模型。当前联调使用 `qwen3.8-flash`，其余设置示例：
+
+```dotenv
+OPENAI_API_KEY=your-api-key
+OPENAI_API_BASE=https://your-provider.example/compatible-mode/v1
+OPENAI_MODEL=qwen3.8-flash
+OPENAI_TEMPERATURE=0.6
+OPENAI_THINKING=disabled
+OPENAI_REQUESTS_PER_MINUTE=0
+CONTEXT_COMPRESS_THRESHOLD=20000
 ```
 
-### 启动系统
+上述密钥和域名是占位内容，必须换成自己的配置；如服务商提供专属业务空间地址，应使用该地址。更换模型时按服务商要求设置参数。密钥只在后端读取。
 
-```bash
-# 启动完整服务
-python main.py
+### 3. 构建并启动
 
-# 仅启动命令行交互
-python main.py --cli
-
-# 仅生成一次报告
-python main.py --report
-
-# 仅启动监控服务
-python main.py --monitor
+```powershell
+npm --prefix front run build
+.\venv\Scripts\python.exe main.py --web
 ```
 
-## 📖 使用指南
+打开 **http://127.0.0.1:8088**。完成首次构建后，也可以双击 `start-web.bat`。前端构建产物不提交到仓库，新克隆项目需要自行构建。
 
-### 命令行交互
+修改后端代码或 `.env` 后先按 `Ctrl+C` 退出，再启动；修改前端后重新构建并刷新页面。退出时关闭调度、Agent 和渠道连接。
 
-```
-👤 您: 分析600036
-🤖 AI: [股票分析报告...]
+## 使用方式
 
-👤 您: 查看招商银行
-🤖 AI: [实时行情...]
+### 网页演示
 
-👤 您: 添加000001到自选
-🤖 AI: 成功添加 000001 到自选...
-```
+1. 输入“分析一下平安银行”，展开执行状态查看工具调用。
+2. 追问“刚才那只股票的主要风险是什么”，展示多轮上下文。
+3. 点击“我的自选”和“看大盘”，查看已有数据。
+4. 点击“每日简报”，等待报告后针对其中一点追问。
+5. 点击“定时任务”，或发送“十分钟后分析平安银行”，再到面板查看任务。
 
-### 快捷命令
+可以说“记住，我偏好稳健投资，主要关注银行板块”，让 Agent 使用用户画像工具保存偏好。
 
-| 命令 | 说明 |
-|------|------|
-| `/watchlist` | 显示自选列表 |
-| `/add <代码>` | 添加股票到自选 |
-| `/remove <代码>` | 从自选移除 |
-| `/report` | 生成早间报告 |
-| `/monitor` | 启动监控 |
-| `/stop` | 停止监控 |
-| `/clear` | 清除对话历史 |
-| `help` | 显示帮助 |
-| `exit` | 退出程序 |
+### 会话与启动模式
 
-### 自选股票管理
+网页目前是**单活跃会话**，没有新建／切换会话界面；多个浏览器标签页连接同一个会话。底层支持不同会话文件，可在启动时指定：
 
-```
-👤 您: /add 600036 000001 300750
-🤖 AI: 成功添加 3 只股票到自选，当前共 5 只
-
-👤 您: /watchlist
-🤖 AI: 
-⭐ 自选列表:
-  • 600036
-  • 000001
-  • 300750
+```powershell
+.\venv\Scripts\python.exe main.py --web --session interview
 ```
 
-## 🏗️ 项目结构
+会话历史与摘要按 session 保存；用户画像和自选全局共享。同一进程的网页、飞书和定时任务使用当前会话，回复路由独立控制。不要同时运行多个共享这些数据目录的进程。
 
-```
-astack/
-├── main.py                      # 主入口
-├── config.py                    # 配置文件
-├── requirements.txt             # 依赖列表
-├── .env.example                 # 环境变量模板
-│
-├── core/                        # 核心模块
-│   ├── agent.py                 # AStockAgent - 主Agent（WORK/IDLE双模式）
-│   ├── memory.py                # 用户记忆系统
-│   ├── session.py               # 会话管理（多会话支持）
-│   ├── scheduler.py             # 任务调度（定时任务）
-│   ├── notifier.py              # 通知管理
-│   ├── subagent.py              # 子Agent管理器
-│   ├── skill_loader.py          # Skill加载器
-│   └── context_compressor.py    # 上下文压缩器
-│
-├── data/                        # 数据模块
-│   ├── akshare_client.py        # AKShare客户端
-│   ├── akshare_client_fixed.py  # AKShare客户端（增强版）
-│   └── indicators.py            # 技术指标计算
-│
-├── tools/                       # 工具模块
-│   ├── base.py                  # 工具基类
-│   ├── registry.py              # 工具注册表
-│   └── all_tools.py             # 所有工具（股票/分析/系统工具）
-│
-├── services/                    # 服务模块
-│   ├── monitoring_service.py    # 实时监控服务（心跳机制）
-│   ├── morning_report_service.py # 早间报告服务
-│   └── screening_service.py     # 选股服务
-│
-├── skills/                      # Skill定义（Markdown格式）
-│   ├── morning_report/SKILL.md  # 晨报生成模板
-│   ├── research_report/SKILL.md # 深度研报模板
-│   └── alert_analysis/SKILL.md  # 异常告警分析模板
-│
-├── channels/                    # 外部渠道接入
-│   ├── __init__.py
-│   └── wecom.py                 # 企业微信接入（Webhook服务器 + API发送）
-│
-└── memory/                      # 持久化存储
-    ├── user.md                  # 用户画像
-    ├── history.md               # 关键事件历史
-    ├── data.json                # 结构化用户数据
-    └── sessions/                # 会话历史
-        ├── default.json
-        └── {session_id}.json
+| 命令参数 | 用途 |
+| --- | --- |
+| `--web` | 桌面网页；用户创建的定时任务自动调度 |
+| `--web --schedule` | 网页，并额外启用旧固定早报和交易时段监控 |
+| `--cli` | 命令行聊天 |
+| `--mode full` 或不加参数 | CLI、固定时间表和监控 |
+| `--report` / `--monitor` | 原有的一次报告／监控入口 |
+
+### 定时任务
+
+“看大盘”右侧的面板支持每日简报或自定义研究。也可以直接说：
+
+- “每个工作日北京时间早上九点生成我的每日简报。”
+- “十分钟后分析平安银行的行情和技术指标。”
+- “列出我的定时任务，把晨报暂停。”
+
+主 Agent 使用 `create_scheduled_task`、`list_scheduled_tasks`、`update_scheduled_task`、`delete_scheduled_task`；与前端 API 共用任务存储和执行逻辑。
+
+- 时间统一按北京时间，工作日指周一至周五，尚未接入交易所节假日日历。
+- 任务跟随创建它的 session，只在程序运行且该会话激活时执行；结果进入聊天记录。
+- 定义保存在本地，重启后恢复。错过的用户任务执行一次，不逐日补跑；中断中的模型调用不续跑。
+- 每个会话最多 30 条任务。暂停停止后续触发，不中断已运行的分析；删除不删除已经生成的报告。
+
+创建用户任务**不需要 `--schedule`**。该参数额外开启旧时间表：09:00 早报，09:30／13:00 启动监控，11:30／15:00 停止监控；交易时段约每分钟检测异动、每 30 分钟触发分析。使用时避免重复安排相同早报。固定时间表可在 `config.py` 调整。
+
+## 记忆与架构
+
+用户画像按每轮对话注入提示词，完整聊天保存在文件中。超过默认 20000 个**估算 token** 后整理旧轮次，保留最近 4 轮和完整工具配对；摘要与精确位置跨轮保存，原始消息仍供网页回看。摘要失败时保留原历史。
+
+这是文件画像与会话摘要，不是向量检索式记忆，没有引入 Mem0 或数据库。
+
+```text
+Web / CLI / 飞书 / 定时任务
+            ↓
+    文件 Mailbox → 串行主 Agent
+                     ├─ 行情、新闻、技术分析工具
+                     ├─ 子 Agent + Markdown Skill
+                     └─ 用户画像、会话与摘要
 ```
 
-## 🔧 配置说明
+网页自选、大盘查询可以直接调用工具；需要模型的聊天和任务共用一个执行队列。Skill 位于 `skills/`，是运行文件，不是可随意清理的说明文档。
 
-### 环境变量
+| 本地路径 | 内容 |
+| --- | --- |
+| `memory/data.json`、`memory/user.md` | 用户画像与偏好 |
+| `memory/sessions/` | 会话原文、摘要和压缩位置 |
+| `memory/mailbox/` | 待处理事件 |
+| `data_store/watchlist.json` | 自选股 |
+| `data_store/scheduled_tasks.json` | 用户定时任务 |
+| `data_store/logs/astack.log` | 运行日志，保留旧文件名以兼容已有环境 |
 
-| 变量名 | 说明 | 默认值 |
-|--------|------|--------|
-| `OPENAI_API_KEY` | OpenAI API密钥 | 必需 |
-| `OPENAI_API_BASE` | API基础地址 | https://api.openai.com/v1 |
-| `OPENAI_MODEL` | 使用的模型 | gpt-4o |
-| `OPENAI_TEMPERATURE` | 温度参数 | 0.7 |
-| `MONITOR_INTERVAL` | 监控间隔（秒） | 60 |
-| `ROUTINE_ANALYSIS_INTERVAL` | 定期分析间隔（秒） | 1800 (30分钟) |
-| `ALERT_COOLDOWN` | 告警冷却期（秒） | 180 |
-| `MORNING_REPORT_TIME` | 早间报告时间 | 09:00 |
-| `CONTEXT_COMPRESS_THRESHOLD` | 上下文压缩阈值（token） | 6000 |
+## 飞书与企业微信（可选）
 
-### 用户记忆 (user.md)
+Web 演示无需配置渠道。使用飞书时额外安装：
 
-系统自动维护 `user.md` 文件，您也可以手动编辑：
-
-```markdown
-## 投资偏好
-- **风险偏好**: moderate
-- **投资风格**: value
-- **关注领域**: 科技股、新能源
-- **止损线**: 10%
+```powershell
+.\venv\Scripts\python.exe -m pip install lark-oapi
 ```
 
-## 📊 技术指标说明
+在飞书开放平台创建并发布机器人应用，配置消息事件 `im.message.receive_v1` 和所需权限，然后在 `.env` 填写 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`。通过 WebSocket 收消息，无需公网回调地址。
 
-### 支持的指标
+企业微信使用 `.env.example` 中的应用凭据、接收端口和验证配置，并需能访问 Webhook。已有 `FEISHU_ALERT_USERS`、`WECOM_ALERT_USERS` 等收件人设置继续用于原有渠道预警。
 
-| 指标 | 说明 |
-|------|------|
-| MA | 移动平均线 (MA5, MA10, MA20, MA60) |
-| RSI | 相对强弱指标 (RSI6, RSI14) |
-| MACD | 指数平滑异同平均线 |
-| BOLL | 布林带 |
-| KDJ | 随机指标 |
-| ATR | 平均真实波幅 |
+## 测试与开发
 
-### 异常检测
+统一检查入口默认使用临时存储、替身模型和替身渠道，不消费真实模型额度或发送消息：
 
-| 异常类型 | 触发条件 | 严重程度 |
-|----------|----------|----------|
-| 价格异动 | 涨跌幅 >= 5% | 🔴 高 |
-| 价格变动 | 涨跌幅 >= 3% | 🟡 中 |
-| 短时变动 | 分钟内变动 >= 0.8% | 🟡 中 |
-| 成交量异常 | 量比 >= 2.5x | 🟡 中 |
-| RSI超买 | RSI >= 80 | 🟡 中 |
-| RSI超卖 | RSI <= 20 | 🟡 中 |
-| BOLL上轨突破 | 价格突破布林带上轨 | 🔴 高 |
-| BOLL下轨突破 | 价格跌破布林带下轨 | 🔴 高 |
-
-### 告警触发机制
-
-1. **数据检查**（每分钟，无LLM）
-   - 纯数据计算涨跌幅、成交量、技术指标
-   - 对比阈值判断是否异常
-
-2. **触发Agent分析**（检测到异常时）
-   - 通过消息队列 `post_event("price_alert", ...)` 唤醒主Agent
-   - 主Agent调用子Agent + `alert_analysis` skill 进行深度分析
-   - 分析完成后主动提醒用户
-
-3. **定期分析**（每30分钟无异常时）
-   - 通过消息队列 `post_event("routine_analysis", ...)` 唤醒主Agent
-   - 主Agent调用子Agent + `research_report` skill 分析所有自选
-   - 决定是否需要提醒用户
-
-## 🔔 通知配置
-
-### 控制台通知（默认）
-无需配置，直接在终端显示
-
-### 钉钉通知
-在 `.env` 中配置：
-```
-NOTIFICATION_CHANNELS=console,dingtalk
-DINGTALK_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx
-DINGTALK_SECRET=your_secret
+```powershell
+.\venv\Scripts\python.exe scripts/check_tools.py --suite all
+.\venv\Scripts\python.exe scripts/check_tools.py --suite tools
+.\venv\Scripts\python.exe scripts/check_tools.py --suite monitoring
+npm --prefix front test
+npm --prefix front run build
 ```
 
-### 企业微信通知（支持双向通信）
+显式检查真实公开数据接口，不调用模型或消息渠道：
 
-系统支持与企业微信**双向通信**，用户可以通过企业微信发送消息与Agent交互。
-
-#### 1. 配置企业微信应用
-
-在 `.env` 中配置：
-```bash
-# 基础信息（从企业微信管理后台获取）
-WECOM_CORP_ID=xxxxxxxxxxxxxxxx
-WECOM_CORP_SECRET=xxxxxxxxxxxxxxxx
-WECOM_AGENT_ID=1000002
-
-# Webhook服务器端口
-WECOM_WEBHOOK_PORT=8080
-
-# Token和EncodingAESKey（用于消息验证和加密，可选但建议配置）
-WECOM_TOKEN=your_token
-WECOM_ENCODING_AES_KEY=your_aes_key
-
-# 发送目标用户（多个用逗号分隔）
-WECOM_REPORT_USERS=ZhangSan,LiSi
-WECOM_ALERT_USERS=ZhangSan,LiSi
+```powershell
+.\venv\Scripts\python.exe scripts/check_tools.py --live --json data_store/tool-health.json
+.\venv\Scripts\python.exe scripts/check_tools.py --live --tool get_hot_stocks
 ```
 
-#### 2. 企业微信后台配置
+真实检查使用有超时的子进程，区分 `PASS`、合法空结果 `EMPTY`、`FAIL`、`TIMEOUT`；失败返回非零退出码。完整模型及渠道联调需要另行手动进行。
 
-1. 登录 [企业微信管理后台](https://work.weixin.qq.com/)
-2. 进入「应用管理」-「创建应用」
-3. 记录 **AgentId** 和 **Secret**
-4. 设置「接收消息」的URL为：`http://your-server:8080/wecom/webhook`
-5. 设置Token和EncodingAESKey（与.env配置一致）
+离线页面预览：`python tests/preview_web_demo.py`，使用明确标注的样例数据和临时会话；与正式服务共用 8088 端口，先退出其中一个再启动另一个。
 
-#### 3. 支持的交互
+前端开发：先启动后端，再执行 `npm --prefix front run dev`，访问 Vite 输出地址。
 
-**用户 → Agent**：
-- 发送股票代码查询行情
-- 发送"分析600036"获取分析报告
-- 发送"/report"生成晨报
+## 数据与凭据
 
-**Agent → 用户**：
-- 晨报每天自动发送（可配置）
-- 股票监控预警实时推送
-- 定期分析报告（30分钟）
+`.env`、密钥文件、个人笔记、记忆、任务定义、行情缓存、日志、虚拟环境、浏览器验收产物和前端构建目录均不上传。仓库保留 `.env.example` 和前端依赖锁文件；服务默认只监听本机，不开放跨域访问。
 
-#### 4. 静默模式
+## 许可证与致谢
 
-如果Agent判断一切正常，可以在回复中添加 `[SKIP_SEND]` 标记来跳过发送：
-```python
-# Agent可以决定不发送某些消息
-if no_significant_changes:
-    return "[SKIP_SEND] 市场正常，无重要变化"
-```
+MIT License（沿用项目原有声明）。
 
-### 飞书通知（支持双向通信）
-
-系统支持飞书**双向通信**，使用 WebSocket 长连接，无需公网IP。
-
-#### 1. 配置飞书应用
-
-在 `.env` 中配置：
-```bash
-# 基础信息（从飞书开放平台获取）
-FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx
-FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# 可选：消息加密和验证
-FEISHU_ENCRYPT_KEY=
-FEISHU_VERIFICATION_TOKEN=
-
-# 发送目标用户（多个用逗号分隔，使用用户的open_id）
-FEISHU_REPORT_USERS=ou_xxxxxxxxxxxxxxxx
-FEISHU_ALERT_USERS=ou_xxxxxxxxxxxxxxxx
-```
-
-#### 2. 飞书开放平台配置
-
-1. 登录 [飞书开放平台](https://open.feishu.cn/)
-2. 创建「企业自建应用」
-3. 进入「凭证与基础信息」，记录 **App ID** 和 **App Secret**
-4. 开启「机器人」功能
-5. 在「事件订阅」中开启以下事件：
-   - `im.message.receive_v1`（接收消息）
-6. 无需配置请求地址（使用 WebSocket 连接）
-7. 发布应用并申请权限
-
-#### 3. 支持的交互
-
-与企业微信相同：
-- 用户发送股票代码查询行情
-- Agent回复分析报告
-- 晨报和预警自动推送
-
-#### 4. 静默模式
-
-与企业微信相同，Agent可以添加 `[SKIP_SEND]` 标记跳过发送。
-
-## 📊 支持的渠道对比
-
-| 功能 | 企业微信 | 飞书 |
-|------|---------|------|
-| 双向通信 | ✅ | ✅ |
-| WebSocket | ❌ | ✅ |
-| 需要公网IP | ✅（Webhook） | ❌ |
-| 文本消息 | ✅ | ✅ |
-| Markdown/卡片 | ✅ | ✅ |
-| 反应表情 | ❌ | ✅（👍）|
-
-## 🛠️ 开发指南
-
-### Agent工作模式
-
-系统采用 **WORK/IDLE 双阶段** 架构：
-
-```
-IDLE PHASE          WORK PHASE           IDLE PHASE
-   (等待)    ──事件──▶ (处理任务)  ──完成──▶ (等待)
-     ▲                                          │
-     └──────────── 新事件触发 ──────────────────┘
-```
-
-- **IDLE阶段**：Agent处于挂机状态，定期检查事件队列
-- **WORK阶段**：处理用户消息、执行工具调用、生成分析报告
-- **状态切换**：通过 `post_event()` 方法从外部触发
-
-### 添加新工具
-
-在 `tools/all_tools.py` 中添加：
-
-```python
-class MyTool(Tool):
-    @property
-    def name(self) -> str:
-        return "my_tool"
-
-    @property
-    def description(self) -> str:
-        return "工具描述"
-
-    @property
-    def parameters(self) -> dict:
-        return {
-            "type": "object",
-            "properties": {
-                "param1": {"type": "string"}
-            },
-            "required": ["param1"]
-        }
-
-    async def execute(self, **kwargs) -> ToolResult:
-        # 实现逻辑
-        return ToolResult(success=True, data={...})
-
-# 添加到 ALL_TOOLS 列表
-ALL_TOOLS = [..., MyTool]
-```
-
-### 添加新Skill
-
-在 `skills/{skill_name}/SKILL.md` 创建：
-
-```markdown
----
-name: skill_name
-description: Skill描述
-version: 1.0
-tags: tag1, tag2
----
-
-# Skill内容
-
-## 分析流程
-1. 步骤1
-2. 步骤2
-
-## 输出格式
-...
-```
-
-然后在 `config.py` 添加到白名单：
-
-```python
-SUBAGENT_SKILLS: List[str] = field(default_factory=lambda: [
-    "research_report",
-    "morning_report",
-    "alert_analysis",
-    "your_new_skill",  # 添加到这里
-])
-```
-
-### 通过消息队列唤醒Agent
-
-```python
-from core.agent import AStockAgent
-
-agent = AStockAgent(session_id="default")
-
-# 发送事件唤醒Agent
-await agent.post_event(
-    event_type="price_alert",  # 或 "routine_analysis", "user_message"
-    content="告警内容",
-    metadata={"code": "600036", "price": 10.5}
-)
-```
-
-### 子Agent调用
-
-```python
-from tools.all_tools import subagent_manager
-
-result = await subagent_manager.run_with_skill(
-    task_name="analysis_task",
-    task_description="分析任务描述",
-    skill_name="alert_analysis",  # 使用的Skill
-    context={"code": "600036"},
-    use_global_tools=True
-)
-
-content = result.get("content")
-```
-
-## 📄 许可证
-
-MIT License
-
-## 🤝 致谢
-
-- [AKShare](https://www.akshare.xyz/) - 财经数据接口
-- [nanobot](https://github.com/...) - Agent框架参考
-
-## ⚠️ 免责声明
-
-本系统仅供学习和研究使用，不构成投资建议。股市有风险，投资需谨慎。
+- [nanobot](https://github.com/HKUDS/nanobot)：Agent 循环与文件记忆设计参考。
+- [AKShare](https://github.com/akfamily/akshare)：财经数据接口。
+- React、aiohttp 及其他开源依赖。

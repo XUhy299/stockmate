@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 # 检查是否安装了飞书SDK
 FEISHU_AVAILABLE = False
 try:
-    import lark_oapi
-    FEISHU_AVAILABLE = True
+    # Avoid eagerly importing the very large SDK in local, unconfigured demos.
+    if os.getenv("FEISHU_APP_ID") and os.getenv("FEISHU_APP_SECRET"):
+        import lark_oapi
+        FEISHU_AVAILABLE = True
 except ImportError:
     pass
 

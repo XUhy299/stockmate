@@ -1,4 +1,4 @@
-# A股分析Agent系统依赖
+# 股伴 StockMate 依赖
 akshare>=1.15.0
 pandas>=2.0.0
 numpy>=1.24.0
@@ -7,7 +7,9 @@ python-dotenv>=1.0.0
 loguru>=0.7.0
 requests>=2.31.0
 pydantic>=2.0.0
-openai>=1.0.0
+# Validated OpenAI-compatible client stack; keep fresh installs reproducible.
+openai==2.30.0
+httpx==0.28.1
 aiohttp>=3.8.0
 asyncio>=3.4.3
 pytz>=2023.3

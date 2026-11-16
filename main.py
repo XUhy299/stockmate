@@ -1,5 +1,5 @@
 """
-A股分析Agent系统 - 主入口
+股伴 StockMate - 主入口
 
 功能:
 1. 开市期间持续监控自选股票技术指标异常
@@ -55,7 +55,7 @@ class AStockSystem:
         self.scheduler = TaskScheduler(self.agent)
         self.running = False
 
-    async def start(self, mode: str = "full"):
+    async def start(self, mode: str = "full", enable_schedule: bool = False):
         """
         启动系统
 
@@ -67,26 +67,33 @@ class AStockSystem:
         print("""
     ╔═══════════════════════════════════════════════════════════╗
     ║                                                           ║
-    ║              📈 A股分析Agent系统 v1.0                      ║
+    ║              📈 股伴 StockMate v1.0                      ║
     ║                                                           ║
     ║   功能:                                                   ║
     ║   • 实时监控自选股票技术指标异常                           ║
     ║   • 每日开市前生成市场分析报告                             ║
     ║   • 对话式股票分析和问答                                   ║
-    ║   • 智能选股和推荐                                         ║
+    ║   • 条件选股和定时研究                                         ║
     ║                                                           ║
     ╚═══════════════════════════════════════════════════════════╝
         """)
 
         logger.info(f"🚀 启动A股分析系统 (模式: {mode})")
 
-        # 加载用户记忆
-        await self._load_user_memory()
+        # Web must never wait on terminal onboarding.
+        if mode != "web":
+            await self._load_user_memory()
 
         # 启动外部渠道服务器（企业微信、飞书等，如果配置）
         await self._start_channel_servers()
 
-        if mode == "full":
+        if mode == "web":
+            from web_app import serve
+            if enable_schedule:
+                await serve(self.agent, scheduler=self.scheduler)
+            else:
+                await serve(self.agent)
+        elif mode == "full":
             await self._start_full()
         elif mode == "cli":
             await self._start_cli()
@@ -486,10 +493,10 @@ class AStockSystem:
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(description="A股分析Agent系统")
+    parser = argparse.ArgumentParser(description="股伴 StockMate")
     parser.add_argument(
         "--mode", "-m",
-        choices=["full", "cli", "report", "monitor"],
+        choices=["full", "cli", "report", "monitor", "web"],
         default="full",
         help="启动模式 (默认: full)"
     )
@@ -520,18 +527,26 @@ def main():
         help="仅启动监控服务"
     )
 
+    parser.add_argument("--web", action="store_const", const="web", dest="mode",
+                        help="启动本机 Web 聊天界面 (127.0.0.1:8088)")
+    parser.add_argument("--schedule", action="store_true",
+                        help="与 --web 一起使用，启用定时早报和交易时段监控")
     args = parser.parse_args()
+    if args.schedule and args.mode != "web":
+        parser.error("--schedule 仅用于 Web 模式；full 模式默认启用定时任务")
 
     system = AStockSystem(session_id=args.session)
 
+    async def run():
+        try:
+            await system.start(args.mode, enable_schedule=args.schedule)
+        finally:
+            await system.stop()
+
     try:
-        asyncio.run(system.start(args.mode))
+        asyncio.run(run())
     except KeyboardInterrupt:
-        print("\n\n正在关闭系统...")
-        asyncio.run(system.stop())
-    except Exception as e:
-        logger.error(f"系统错误: {e}", exc_info=True)
-        raise
+        print("\n已关闭系统。")
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 #!/bin/bash
 
-echo "正在启动A股分析Agent系统..."
+echo "正在启动股伴 StockMate..."
 echo ""
 
 # 检查Python是否安装
 if ! command -v python3 &> /dev/null; then
-    echo "错误: 未安装Python3，请先安装Python 3.8+"
+    echo "错误: 未安装Python3，请先安装Python 3.12"
     exit 1
 fi
 

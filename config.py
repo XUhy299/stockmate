@@ -1,5 +1,5 @@
 """
-A股分析Agent系统配置
+股伴 StockMate 配置
 """
 import os
 from pathlib import Path
@@ -31,8 +31,10 @@ class Config:
     OPENAI_API_KEY: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
     OPENAI_API_BASE: str = field(default_factory=lambda: os.getenv("OPENAI_API_BASE", ""))
     OPENAI_MODEL: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o"))
-    # 注意: Moonshot kimi-k2.5 只支持 temperature=1
+    # Temperature and thinking mode follow the configured provider/model.
     OPENAI_TEMPERATURE: float = field(default_factory=lambda: float(os.getenv("OPENAI_TEMPERATURE", "0.7")))
+    OPENAI_THINKING: str = field(default_factory=lambda: os.getenv("OPENAI_THINKING", ""))
+    OPENAI_REQUESTS_PER_MINUTE: int = field(default_factory=lambda: int(os.getenv("OPENAI_REQUESTS_PER_MINUTE", "0")))
 
     # === 股票监控配置 ===
     # 监控间隔（秒），开市期间每30秒检查一次
@@ -122,7 +124,7 @@ class Config:
 
     # === 上下文压缩配置 ===
     # Token阈值，超过此值进行上下文压缩
-    CONTEXT_COMPRESS_THRESHOLD: int = 200000
+    CONTEXT_COMPRESS_THRESHOLD: int = field(default_factory=lambda: int(os.getenv("CONTEXT_COMPRESS_THRESHOLD", "20000")))
 
     # === Agent Idle/挂机配置 ===
     # Idle状态检查间隔（秒）- 检查是否有新事件
@@ -160,6 +162,13 @@ class Config:
     # === 日志配置 ===
     LOG_LEVEL: str = "INFO"
     LOG_FILE: Optional[Path] = field(default=None)  # 在__post_init__中设置
+
+    def model_request_options(self) -> dict:
+        if self.OPENAI_THINKING in {"enabled", "disabled"}:
+            if self.OPENAI_MODEL.lower().startswith("qwen"):
+                return {"extra_body": {"enable_thinking": self.OPENAI_THINKING == "enabled"}}
+            return {"extra_body": {"thinking": {"type": self.OPENAI_THINKING}}}
+        return {}
 
     def __post_init__(self):
         """初始化后创建必要目录并设置路径"""

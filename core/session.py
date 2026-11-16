@@ -31,6 +31,7 @@ class Session:
     last_consolidated: int = 0  # 已压缩的消息索引
     compress_count: int = 0  # 压缩次数
     metadata: Dict[str, Any] = field(default_factory=dict)
+    context_summary: str = ""  # Model context only; raw messages remain available to the UI.
 
     def add_message(self, role: str, content: str, **kwargs) -> Dict[str, Any]:
         """添加消息到会话"""
@@ -55,8 +56,9 @@ class Session:
             从last_consolidated开始的消息列表
         """
         # 从已压缩位置开始
-        start_idx = self.last_consolidated
-        history = self.messages[start_idx:]
+        # Old files with only an index have no recoverable summary: retain history.
+        start_idx = self.last_consolidated if self.context_summary else 0
+        history = [m for m in self.messages[start_idx:] if not m.get("display_only")]
 
         if max_messages > 0 and len(history) > max_messages:
             # 保留最近的消息，但确保从user消息开始
@@ -80,7 +82,22 @@ class Session:
                     clean_msg[key] = msg[key]
             cleaned.append(clean_msg)
 
+        if self.context_summary:
+            cleaned.insert(0, {"role": "system", "content": "[历史对话摘要，仅作背景，行情以最新工具结果为准]\n" + self.context_summary})
         return cleaned
+
+    def commit_compaction(self, summary: str, new_index: int):
+        """Advance an exact raw-message boundary, never remove the chat transcript."""
+        minimum = self.last_consolidated if self.context_summary else 0
+        if not summary.strip() or not minimum < new_index < len(self.messages):
+            raise ValueError("无效的会话压缩摘要或位置")
+        if self.messages[new_index].get("role") != "user" or self.messages[new_index].get("display_only"):
+            raise ValueError("压缩位置必须位于完整用户轮次的起点")
+        self.context_summary = summary.strip()
+        self.last_consolidated = new_index
+        self.compress_count += 1
+        self.updated_at = datetime.now().isoformat()
+        logger.info("会话 %s: 保存摘要，压缩位置 %s", self.session_id, new_index)
 
     def update_consolidated(self, new_index: int):
         """更新已压缩位置"""
@@ -95,6 +112,7 @@ class Session:
         self.messages = []
         self.last_consolidated = 0
         self.compress_count = 0
+        self.context_summary = ""
         self.updated_at = datetime.now().isoformat()
 
     def to_dict(self) -> Dict[str, Any]:
@@ -106,7 +124,8 @@ class Session:
             "updated_at": self.updated_at,
             "last_consolidated": self.last_consolidated,
             "compress_count": self.compress_count,
-            "metadata": self.metadata
+            "metadata": self.metadata,
+            "context_summary": self.context_summary,
         }
 
     @classmethod
@@ -119,7 +138,8 @@ class Session:
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             last_consolidated=data.get("last_consolidated", 0),
             compress_count=data.get("compress_count", 0),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
+            context_summary=data.get("context_summary", ""),
         )
 
 

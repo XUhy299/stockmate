@@ -29,6 +29,8 @@ class TaskScheduler:
         self.agent = agent
         self.running = False
         self.tasks: List[asyncio.Task] = []
+        self._jobs = set()
+        self._schedule = schedule.Scheduler()
         self.cn_tz = ZoneInfo("Asia/Shanghai")
 
         # 设置监控服务的Agent引用
@@ -83,29 +85,30 @@ class TaskScheduler:
 
     def _setup_schedules(self):
         """设置定时任务"""
+        self._schedule.clear()
         # 早间报告 - 每天9:00（交易日）
-        schedule.every().day.at(config.MORNING_REPORT_TIME).do(
-            lambda: asyncio.create_task(self._generate_morning_report())
+        self._schedule.every().day.at(config.MORNING_REPORT_TIME).do(
+            lambda: self._spawn_job(self._generate_morning_report)
         )
 
         # 开市监控启动 - 上午9:30
-        schedule.every().day.at(config.AM_START).do(
-            lambda: asyncio.create_task(self._start_market_monitoring())
+        self._schedule.every().day.at(config.AM_START).do(
+            lambda: self._spawn_job(self._start_market_monitoring)
         )
 
         # 午休暂停监控 - 上午11:30
-        schedule.every().day.at(config.AM_END).do(
-            lambda: asyncio.create_task(self._pause_market_monitoring())
+        self._schedule.every().day.at(config.AM_END).do(
+            lambda: self._spawn_job(self._pause_market_monitoring)
         )
 
         # 下午监控启动 - 下午13:00
-        schedule.every().day.at(config.PM_START).do(
-            lambda: asyncio.create_task(self._start_market_monitoring())
+        self._schedule.every().day.at(config.PM_START).do(
+            lambda: self._spawn_job(self._start_market_monitoring)
         )
 
         # 收市停止监控 - 下午15:00
-        schedule.every().day.at(config.PM_END).do(
-            lambda: asyncio.create_task(self._stop_market_monitoring())
+        self._schedule.every().day.at(config.PM_END).do(
+            lambda: self._spawn_job(self._stop_market_monitoring)
         )
 
         logger.info(f"📅 定时任务已设置:")
@@ -113,12 +116,24 @@ class TaskScheduler:
         logger.info(f"   - 上午监控: {config.AM_START} - {config.AM_END}")
         logger.info(f"   - 下午监控: {config.PM_START} - {config.PM_END}")
 
+    def _spawn_job(self, factory):
+        if not self.running:
+            return
+        task = asyncio.create_task(factory())
+        self._jobs.add(task)
+        task.add_done_callback(self._job_done)
+
+    def _job_done(self, task):
+        self._jobs.discard(task)
+        if not task.cancelled() and task.exception():
+            logger.error("定时任务失败: %s", type(task.exception()).__name__)
+
     async def _schedule_loop(self):
         """调度循环 - 每秒检查定时任务"""
         while self.running:
             try:
                 # 运行待执行的定时任务
-                schedule.run_pending()
+                self._schedule.run_pending()
                 await asyncio.sleep(1)
 
             except Exception as e:
@@ -157,7 +172,7 @@ class TaskScheduler:
                 await self.agent.post_event(
                     "morning_report",
                     content,
-                    metadata={"date": report_date, "type": "morning_report"}
+                    metadata={"date": report_date, "type": "morning_report", "source": "schedule"}
                 )
                 logger.info("✅ 早间报告事件已发送到主Agent")
             except Exception as e:
@@ -208,14 +223,20 @@ class TaskScheduler:
 
     async def stop(self):
         """停止调度器"""
+        if not self.running and not self.tasks and not self._jobs and not self._schedule.jobs:
+            return
         self.running = False
+        self._schedule.clear()
 
         # 停止监控服务
         monitoring_service.stop()
 
         # 取消所有任务
-        for task in self.tasks:
+        tasks = [*self.tasks, *self._jobs]
+        for task in tasks:
             task.cancel()
 
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self.tasks.clear()
+        self._jobs.clear()
         logger.info("🛑 任务调度器已停止")

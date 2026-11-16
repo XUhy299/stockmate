@@ -36,3 +36,26 @@ desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# Web build and local verification artifacts
+front/node_modules/
+front/dist/
+output/
+
+# Local credentials, browser artifacts and personal notes
+credentials/
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*apiKey*.csv
+*apikey*.csv
+.playwright-cli/
+.playwright/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+总结.txt
+toolcall.txt
